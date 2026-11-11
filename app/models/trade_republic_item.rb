@@ -1,6 +1,9 @@
 class TradeRepublicItem < ApplicationRecord
   include Syncable, Provided, Unlinking, Encryptable, DestroyableLater
 
+  # Serialize provider fetch and account processing across Sidekiq jobs.
+  PROCESSING_LOCK_NAMESPACE = 4015
+
   # The PIN is accepted only for the authentication request. It is never
   # persisted; session restoration uses the encrypted session blob instead.
   attr_accessor :pin
@@ -58,6 +61,18 @@ class TradeRepublicItem < ApplicationRecord
 
   def ready_for_sync?
     good? && pending_login_state.blank? && session_configured? && !session_expired?
+  end
+
+  def with_account_processing_lock
+    connection = self.class.lease_connection
+    key = [ PROCESSING_LOCK_NAMESPACE, id.to_s ]
+    connection.execute(self.class.sanitize_sql_array([ "SELECT pg_advisory_lock(?, hashtext(?))", *key ]))
+
+    begin
+      yield
+    ensure
+      connection.execute(self.class.sanitize_sql_array([ "SELECT pg_advisory_unlock(?, hashtext(?))", *key ]))
+    end
   end
 
   def import_latest_data

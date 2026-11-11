@@ -157,6 +157,7 @@ en:
       processing_failed: The account was linked, but its initial data processing failed. A sync has been scheduled; check the debug log if it remains incomplete.
       failed: Failed to link Trade Republic account.
     complete_account_setup:
+      import_queued: The account history is being imported in the background.
       success:
         one: Successfully created %{count} Trade Republic account.
         other: Successfully created %{count} Trade Republic accounts.

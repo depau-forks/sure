@@ -63,6 +63,7 @@ it:
       not_found: "Conto o configurazione Trade Republic non trovati."
       success: "Conto collegato correttamente a Trade Republic."
     complete_account_setup:
+      import_queued: Lo storico dei conti viene importato in background.
       success:
         one: "È stato creato correttamente %{count} conto Trade Republic."
         other: "Sono stati creati correttamente %{count} conti Trade Republic."

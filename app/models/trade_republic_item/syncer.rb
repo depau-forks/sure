@@ -8,6 +8,12 @@ class TradeRepublicItem::Syncer
   end
 
   def perform_sync(sync)
+    trade_republic_item.with_account_processing_lock do
+      perform_locked_sync(sync)
+    end
+  end
+
+  def perform_locked_sync(sync)
     sync.update!(status_text: I18n.t("trade_republic_items.sync.status.checking_credentials")) if sync.respond_to?(:status_text)
     unless trade_republic_item.credentials_configured?
       trade_republic_item.update!(status: :requires_update)

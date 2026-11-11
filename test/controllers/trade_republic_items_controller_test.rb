@@ -177,15 +177,20 @@ class TradeRepublicItemsControllerTest < ActionDispatch::IntegrationTest
     item = trade_republic_items(:configured_item)
     provider_account = trade_republic_accounts(:main_account)
 
-    assert_difference "Account.count", 1 do
-      assert_difference "AccountProvider.count", 1 do
-        post complete_account_setup_trade_republic_item_url(item), params: {
-          account_ids: [ provider_account.id ]
-        }
+    TradeRepublicAccount::Processor.expects(:new).never
+
+    assert_enqueued_with(job: TradeRepublicAccountSetupJob, args: [ item ]) do
+      assert_difference "Account.count", 1 do
+        assert_difference "AccountProvider.count", 1 do
+          post complete_account_setup_trade_republic_item_url(item), params: {
+            account_ids: [ provider_account.id ]
+          }
+        end
       end
     end
 
     assert_redirected_to accounts_path
+    assert_includes flash[:notice], I18n.t("trade_republic_items.complete_account_setup.import_queued")
     provider_account.reload
     assert_not_nil provider_account.current_account
   end
@@ -241,11 +246,13 @@ class TradeRepublicItemsControllerTest < ActionDispatch::IntegrationTest
     provider_account = trade_republic_accounts(:main_account)
     TradeRepublicAccount.any_instance.stubs(:ensure_account_provider!).returns(nil)
 
-    assert_no_difference "Account.count" do
-      assert_no_difference "AccountProvider.count" do
-        post complete_account_setup_trade_republic_item_url(item), params: {
-          account_ids: [ provider_account.id ]
-        }
+    assert_no_enqueued_jobs only: TradeRepublicAccountSetupJob do
+      assert_no_difference "Account.count" do
+        assert_no_difference "AccountProvider.count" do
+          post complete_account_setup_trade_republic_item_url(item), params: {
+            account_ids: [ provider_account.id ]
+          }
+        end
       end
     end
 

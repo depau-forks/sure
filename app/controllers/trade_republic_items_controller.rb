@@ -399,7 +399,9 @@ class TradeRepublicItemsController < ApplicationController
 
     processing_failed = false
     begin
-      TradeRepublicAccount::Processor.new(tr_account.reload).process
+      tr_account.trade_republic_item.with_account_processing_lock do
+        TradeRepublicAccount::Processor.new(tr_account.reload).process
+      end
     rescue => e
       processing_failed = true
       DebugLogEntry.capture(
@@ -465,7 +467,6 @@ class TradeRepublicItemsController < ApplicationController
     selected_accounts = Array(params[:account_ids]).reject(&:blank?)
     created_accounts = []
     failed_accounts = 0
-    failed_processing = 0
 
     selected_accounts.each do |tr_account_id|
       tr_account = @trade_republic_item.trade_republic_accounts.find_by(id: tr_account_id)
@@ -493,30 +494,16 @@ class TradeRepublicItemsController < ApplicationController
         )
         next
       end
-
-      begin
-        TradeRepublicAccount::Processor.new(tr_account.reload).process
-      rescue => e
-        failed_processing += 1
-        DebugLogEntry.capture(
-          category: "sync",
-          level: "error",
-          message: "Failed to process Trade Republic account #{tr_account.id} after setup: #{e.class} - #{e.message}",
-          source: "trade_republic",
-          family: Current.family,
-          provider_key: "trade_republic"
-        )
-      end
     end
 
     @trade_republic_item.update!(pending_account_setup: @trade_republic_item.unlinked_accounts_count.positive?)
-    # The accounts are set up from stored data; syncing them needs a login.
-    @trade_republic_item.sync_later if created_accounts.any? && @trade_republic_item.ready_for_sync?
+    # Import the stored snapshots after redirecting, not inside the HTTP request.
+    TradeRepublicAccountSetupJob.perform_later(@trade_republic_item) if created_accounts.any?
 
     if created_accounts.any?
-      options = { notice: t(".success", count: created_accounts.count), status: :see_other }
-      failed_count = failed_accounts + failed_processing
-      options[:alert] = t(".partial_failure", count: failed_count) if failed_count.positive?
+      notice = "#{t(".success", count: created_accounts.count)} #{t(".import_queued")}"
+      options = { notice: notice, status: :see_other }
+      options[:alert] = t(".partial_failure", count: failed_accounts) if failed_accounts.positive?
       redirect_to accounts_path, **options
     elsif selected_accounts.empty?
       redirect_to setup_accounts_trade_republic_item_path(@trade_republic_item), alert: t(".none_selected"), status: :see_other
