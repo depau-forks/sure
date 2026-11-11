@@ -31,6 +31,14 @@ class TradeRepublicAccountSetupJobTest < ActiveJob::TestCase
     assert_raises(RuntimeError) { TradeRepublicAccountSetupJob.perform_now(@item) }
   end
 
+  test "does not schedule a sync when no linked accounts were processed" do
+    @item.stubs(:process_accounts).returns([])
+    @item.expects(:sync_later).never
+    @item.expects(:schedule_account_syncs).never
+
+    TradeRepublicAccountSetupJob.perform_now(@item)
+  end
+
   test "does nothing for a connection scheduled for deletion" do
     @item.update_column(:scheduled_for_deletion, true)
     @item.expects(:process_accounts).never
