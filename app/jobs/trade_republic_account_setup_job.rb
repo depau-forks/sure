@@ -8,8 +8,11 @@ class TradeRepublicAccountSetupJob < ApplicationJob
       trade_republic_item.with_account_processing_lock do
         return if trade_republic_item.reload.scheduled_for_deletion?
 
-        failed = trade_republic_item.process_accounts.count { !_1[:success] }
+        results = trade_republic_item.process_accounts
+        failed = results.count { !_1[:success] }
         raise "Trade Republic account setup processing failed for #{failed} account(s)" if failed.positive?
+
+        return if results.empty?
       end
 
       if trade_republic_item.reload.ready_for_sync?
