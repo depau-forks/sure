@@ -611,6 +611,55 @@ If you download the new `bin/db-backup.sh` without updating the compose file, th
 
 ## Troubleshooting
 
+### Trade Republic login succeeds, but syncing asks to reconnect
+
+Trade Republic's QR/push login is handled by `web`, while the subsequent import runs in the Sidekiq `worker`. If the two containers have different environment settings, login can succeed but the first sync can fail with `Trade Republic session expired. Re-authentication required.` The account then returns to `requires_update`, even though its stored session expiry is in the future.
+
+Check which optional Trade Republic settings are present in each container **without printing their values**:
+
+```bash
+for service in web worker; do
+  echo "=== $service ==="
+  docker compose exec -T "$service" sh -c '
+    for key in TRADE_REPUBLIC_WAF_TOKEN TRADE_REPUBLIC_USER_AGENT TRADE_REPUBLIC_APP_VERSION TRADE_REPUBLIC_DEVICE_ID; do
+      if [ -n "$(printenv "$key")" ]; then
+        printf "%s=SET\n" "$key"
+      else
+        printf "%s=UNSET\n" "$key"
+      fi
+    done
+  '
+done
+```
+
+Unset values are not necessarily a problem; the important part is that settings intentionally configured for Trade Republic are consistent. In particular, `TRADE_REPUBLIC_WAF_TOKEN` supplies an extra authentication header when present. For a more targeted check, compare the account endpoint's HTTP status from both containers (this contacts Trade Republic but prints no session data):
+
+```bash
+for service in web worker; do
+  echo "=== $service ==="
+  docker compose exec -T "$service" bin/rails runner '
+    item = TradeRepublicItem.active.find { |candidate| candidate.session_configured? }
+    abort "No configured Trade Republic session" unless item
+
+    session = Provider::TradeRepublicSession.new(
+      phone_number: nil, pin: nil, session_blob: item.session_blob,
+      device_id: item.device_id
+    )
+    puts "Account endpoint: HTTP #{session.get("/api/v2/auth/account").code}"
+  '
+done
+```
+
+If `web` returns HTTP 200 and `worker` returns HTTP 401/403, review the environment settings before repeatedly re-authenticating. Docker Compose uses `.env` for variable substitution but does **not** pass all its variables into containers automatically. The [shared `x-rails-env` configuration](#passing-the-settings-to-the-containers) in `compose.example.yml` supplies settings to both services; if you customize it or add `env_file`, ensure both services receive the required values.
+
+After correcting the configuration, recreate the affected container (a simple `docker compose restart` does not reload its environment):
+
+```bash
+docker compose up -d --force-recreate worker
+```
+
+If Sure already marked the connection `requires_update`, authenticate once more in the UI to restart the import. Avoid logging session cookies, access tokens, or full provider responses while troubleshooting.
+
 ### ActiveRecord::DatabaseConnectionError
 
 If you are trying to get Sure started for the **first time** and run into database connection issues, it is likely because Docker has already initialized the Postgres database with a _different_ default role (usually from a previous attempt to start the app).
