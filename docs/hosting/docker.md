@@ -650,7 +650,7 @@ for service in web worker; do
 done
 ```
 
-If `web` returns HTTP 200 and `worker` returns HTTP 401/403, review the environment settings before repeatedly re-authenticating. Docker Compose uses `.env` for variable substitution but does **not** pass all its variables into containers automatically. The [shared `x-rails-env` configuration](#passing-the-settings-to-the-containers) in `compose.example.yml` supplies settings to both services; if you customize it or add `env_file`, ensure both services receive the required values.
+If `web` returns HTTP 200 and `worker` returns HTTP 401/403, review the environment settings before repeatedly re-authenticating. Docker Compose uses `.env` for variable substitution but does **not** pass all its variables into containers automatically. The shared [`x-rails-env` anchor](../../compose.example.yml) in `compose.example.yml` supplies settings to both services; if you customize it or add `env_file`, ensure both services receive the required values.
 
 After correcting the configuration, recreate the affected container (a simple `docker compose restart` does not reload its environment):
 
